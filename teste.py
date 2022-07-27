@@ -3,9 +3,10 @@ from email.mime import message
 from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
+from sqlalchemy import false
 import banco
 from datetime import *
-
+    
 def calcPagamento(horaSaida, horaEntrada):
     hE = datetime.strptime(horaEntrada, '%d/%m/%Y %H:%M:%S') 
     permanencia = horaSaida - hE
@@ -40,6 +41,7 @@ def calcPagamento(horaSaida, horaEntrada):
 
 def popular():
     tv.delete(*tv.get_children())
+    carros_no_patio.clear()
     vquery= "SELECT * FROM tb_carros order by T_HORARIOENT"
     linhas= banco.dql(vquery)
     for i in linhas:
@@ -47,10 +49,58 @@ def popular():
             continue
         else:
             tv.insert("", "end", values= i)
+            carros_no_patio.append(i)
+
+def autocompletar(e):
+    cplaca.delete(0, END)
+    cmodelo.delete(0, END)
+
+    carro= tv.item(tv.selection()[0], "values")
+    valorPlaca = carro[1]
+    valorModelo = carro[2]
+    cplaca.insert(0, valorPlaca)
+    cmodelo.insert(0, valorModelo)
+    cmodelo.focus()
+
+def atualizar(dados):
+    tv.delete(*tv.get_children())
+    for i in dados:
+       tv.insert("", "end", values= i)
+
+def checar(e):
+    digitadoP = cplaca.get()
+    digitadoM = cmodelo.get()
+
+    if digitadoP == '': 
+        if digitadoM == '':
+            dados= carros_no_patio
+        else:
+            dados = []
+            for item in carros_no_patio:
+                modelo = item[2]
+                if digitadoM.lower() in modelo.lower():  
+                    dados.append(item)
+    else:
+        if digitadoM == '':
+            dados = []
+            for item in carros_no_patio:
+                placa = item[1]
+                if digitadoP.lower() in placa.lower():  
+                    dados.append(item)
+        else:
+            for item in carros_no_patio:
+                placa = item[1]
+                modelo = item[2]
+                if digitadoP.lower() in placa.lower(): 
+                    if digitadoM.lower() in modelo.lower():
+                        dados.append(item)
+
+    atualizar(dados)
 
 def inserir():
     if cplaca.get()== "" or cmodelo.get()== "":
         messagebox.showerror(title= "ERRO", message= "Preencha todos os campos!!")
+        cplaca.focus()
         return
     
     e = datetime.now()
@@ -61,11 +111,13 @@ def inserir():
         vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
         carros= banco.dql(vquery)
         for c in carros:
+            vTicket= c[0]
             vPatio= c[5]
             vTicket= c[0]
+            vEntrada= c[3]
        
         if vPatio== 1:
-            messagebox.showerror(title= "ERRO", message= "Carro ja está no pátio!!")
+            deletar(c[0], c[3])
             cplaca.delete(0, END)
             cmodelo.delete(0, END)    
             cplaca.focus()
@@ -86,30 +138,18 @@ def inserir():
     cplaca.focus()
 
 
-def deletar():
+def deletar(vTicket, horaEnt):
 
     e = datetime.now()
     horaSaida = "%s/%s/%s " % (e.day, e.month, e.year)
-    horaSaida += "%s:%s:%s" % (e.hour, e.minute, e.second)
-
+    horaSaida += "%s:%s:%s" % (e.hour, e.minute, e.second)     
+    
     try:
-        vTicket= -1
-        itemSelecionado= tv.selection()[0]
-        valores= tv.item(itemSelecionado, "values")
-        vTicket= valores[0]  
-        horaEnt = valores[3]  
-
-        try:
-            vquery= "UPDATE tb_carros SET I_ESTANOPATIO= '0', T_HORARIOSAIDA='%s'  WHERE I_TICKET='%s'" % (horaSaida, vTicket)
-            tarifa = calcPagamento(horaSaida = e, horaEntrada= horaEnt)
-            messagebox.showwarning(title= "PAGAMENTO", message= "O valor ficou em R$ %s Reais" % (tarifa))
-            banco.dml(vquery)
-            tv.delete(itemSelecionado)
-
-        except Exception as e:
-            messagebox.showerror(title= "ERRO", message= e)
-            return 
-            
+        vquery= "UPDATE tb_carros SET I_ESTANOPATIO= '0', T_HORARIOSAIDA='%s'  WHERE I_TICKET='%s'" % (horaSaida, vTicket)
+        tarifa = calcPagamento(horaSaida = e, horaEntrada= horaEnt)
+        messagebox.showwarning(title= "PAGAMENTO", message= "O valor ficou em R$ %s Reais" % (tarifa))
+        banco.dml(vquery)
+        popular()
 
     except Exception as e:
         messagebox.showerror(title= "ERRO", message= e)
@@ -156,8 +196,7 @@ def pesquisar():
                     continue
                 else:
                     tv.insert("", "end", values= i)
-
-    
+  
 
 
 app = Tk() 
@@ -167,22 +206,25 @@ app.configure(background="#dde")
 
 
 #quadroGrid
-quadroGrid= LabelFrame(app, text= "Contatos")
+quadroGrid= LabelFrame(app, text= "Carros")
 quadroGrid.pack(fill="both", expand="yes", padx=10, pady= 10)
 
 #TreeView
-tv = ttk.Treeview(quadroGrid, columns= ('ticket', 'placa', 'modelo', 'horaEnt'), show= 'headings')
+tv = ttk.Treeview(quadroGrid, columns= ('ticket', 'placa', 'modelo', 'horaEnt', "tarifa"), show= 'headings')
 tv.column('ticket', minwidth= 0, width= 50)
 tv.column('placa', minwidth= 0, width= 70)
 tv.column('modelo', minwidth= 0, width= 100)
 tv.column('horaEnt', minwidth= 0, width= 115)
+tv.column('tarifa', minwidth= 0, width= 50)
 tv.heading('ticket', text= 'Ticket')
 tv.heading('placa', text= 'Placa')
 tv.heading('modelo', text= 'Modelo')
 tv.heading('horaEnt', text= 'Horário de Entrada')
+tv.heading('tarifa', text= 'Tarifa')
+tv.bind("<<TreeviewSelect>>", autocompletar)
 tv.pack()
+carros_no_patio = []
 popular()
-
 
 #quadroInserir
 quadroInserir = LabelFrame(app, text= "Inserir ou pesquisar carros")
@@ -195,17 +237,19 @@ Label(quadroInserir, text= "Modelo: ", background= "#dde", foreground= "#009").g
 #Entryes
 cplaca = Entry(quadroInserir)
 cplaca.grid(column= 1, row= 0, padx= 5, pady= 5)
+cplaca.bind('<KeyRelease>', checar)
 
 cmodelo = Entry(quadroInserir)
 cmodelo.grid(column= 3, row= 0, padx= 5, pady= 5)
+cmodelo.bind('<Return>', (lambda event: inserir()))
+cmodelo.bind('<KeyRelease>', checar)
+
 
 #Buttons
 btn_inserir= Button(quadroInserir, text= "Inserir", command= inserir)
 btn_deletar= Button(quadroInserir, text= "Deletar", command= deletar)
 btn_pesquisar= Button(quadroInserir, text= "Pesquisar", command= pesquisar)
 
-btn_inserir.grid(column= 1, row= 1)
-btn_deletar.grid(column= 2, row= 1)
 btn_pesquisar.grid(column= 3, row= 1)
 
 app.mainloop()
