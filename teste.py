@@ -3,6 +3,7 @@ from email.mime import message
 from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
+from requests import delete
 from sqlalchemy import false
 import banco
 from datetime import *
@@ -48,7 +49,9 @@ def popular():
         if i[5]== 0:
             continue
         else:
-            tv.insert("", "end", values= i)
+            horaSaida = datetime.now()
+            tarifa = calcPagamento(horaEntrada=i[3], horaSaida= horaSaida)
+            tv.insert("", "end", values= (i[0], i[1], i[2], i[3], str(tarifa)))
             carros_no_patio.append(i)
 
 def autocompletar(e):
@@ -65,37 +68,70 @@ def autocompletar(e):
 def atualizar(dados):
     tv.delete(*tv.get_children())
     for i in dados:
-       tv.insert("", "end", values= i)
+        if i[5]== 0:
+            continue
+        else:
+            horaSaida = datetime.now()
+            tarifa = calcPagamento(horaEntrada=i[3], horaSaida= horaSaida)
+            tv.insert("", "end", values= (i[0], i[1], i[2], i[3], "R$: " + str(tarifa)))
+    
+    try:
+        valorModelo = dados[0][2]
+        valorPlaca = dados[0][1]
+    except: 
+        valorModelo = ''
+        valorPlaca = ''
+
+    tamDigitado = len(cplaca.get())
+
+    if cplaca.get() == '':
+        cmodelo.delete(0, END)
+    else:    
+        digitado = cplaca.get().lower()
+        placaInserir = valorPlaca.lower()
+        
+        for char in digitado:
+            placaInserir = placaInserir.replace(char, '', 1)
+
+        '''for char in digitado:
+            placaInserir = placaInserir.replace(char, '', 1)'''
+
+        cmodelo.delete(0, END)
+        cmodelo.insert(0, valorModelo)
+        cplaca.insert(tamDigitado, placaInserir.upper())
+        cplaca.selection_range(tamDigitado, END)
+
+def upperM(e):
+    digitadoM = cmodelo.get()
+    cmodelo.delete(0, END)
+    cmodelo.insert(0, digitadoM.upper())
 
 def checar(e):
+    vquery= "SELECT * FROM tb_carros order by T_HORARIOENT"
+    carros= banco.dql(vquery)
     digitadoP = cplaca.get()
-    digitadoM = cmodelo.get()
+    tamDigitado = len(cplaca.get())
+    cplaca.delete(0, END)
+    cplaca.insert(0, digitadoP.upper())
+
+    if tamDigitado > 7:
+        messagebox.showerror("ERRO!", "Limite máximo de caracteres excedido!")
+        cplaca.delete(7, END)
 
     if digitadoP == '': 
-        if digitadoM == '':
-            dados= carros_no_patio
-        else:
-            dados = []
-            for item in carros_no_patio:
-                modelo = item[2]
-                if digitadoM.lower() in modelo.lower():  
-                    dados.append(item)
+        dados= carros
+
     else:
-        if digitadoM == '':
-            dados = []
-            for item in carros_no_patio:
-                placa = item[1]
-                if digitadoP.lower() in placa.lower():  
-                    dados.append(item)
-        else:
-            for item in carros_no_patio:
-                placa = item[1]
-                modelo = item[2]
-                if digitadoP.lower() in placa.lower(): 
-                    if digitadoM.lower() in modelo.lower():
-                        dados.append(item)
+        dados = []
+        for item in carros:
+            placa = item[1]
+            if digitadoP.lower() in placa.lower():  
+                dados.append(item)
 
     atualizar(dados)
+
+def fococModelo():
+    cmodelo.focus()
 
 def inserir():
     if cplaca.get()== "" or cmodelo.get()== "":
@@ -158,45 +194,19 @@ def deletar(vTicket, horaEnt):
 def pesquisar():
 
     if cplaca.get()== "":
-
-        if cmodelo.get()== "":
             popular()
 
-        else: 
-            tv.delete(*tv.get_children())
-            vquery= "SELECT * FROM tb_carros WHERE T_MODELO LIKE '%" + cmodelo.get()+ "%'"
-            linhas= banco.dql(vquery)
-
-            for i in linhas:
-                if i[5]== 0:
-                    continue
-                else:
-                    tv.insert("", "end", values= i)
-
     else:
+        tv.delete(*tv.get_children())
+        vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
+        linhas= banco.dql(vquery)
 
-        if cmodelo.get()== "":
-            tv.delete(*tv.get_children())
-            vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
-            linhas= banco.dql(vquery)
-
-            for i in linhas:
-                if i[5]== 0:
-                    continue
-                else:
-                    tv.insert("", "end", values= i)
-
+        for i in linhas:
+            if i[5]== 0:
+                continue
         else:
-            tv.delete(*tv.get_children())
-            vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%' AND T_MODELO LIKE '%" + cmodelo.get()+ "%'"
-            linhas= banco.dql(vquery)
+                tv.insert("", "end", values= i)
 
-            for i in linhas:
-                if i[5]== 0:
-                    continue
-                else:
-                    tv.insert("", "end", values= i)
-  
 
 
 app = Tk() 
@@ -238,18 +248,12 @@ Label(quadroInserir, text= "Modelo: ", background= "#dde", foreground= "#009").g
 cplaca = Entry(quadroInserir)
 cplaca.grid(column= 1, row= 0, padx= 5, pady= 5)
 cplaca.bind('<KeyRelease>', checar)
+cplaca.bind('<Return>', (lambda event: fococModelo()))
 
 cmodelo = Entry(quadroInserir)
 cmodelo.grid(column= 3, row= 0, padx= 5, pady= 5)
+cmodelo.bind('<KeyRelease>', upperM)
 cmodelo.bind('<Return>', (lambda event: inserir()))
-cmodelo.bind('<KeyRelease>', checar)
 
-
-#Buttons
-btn_inserir= Button(quadroInserir, text= "Inserir", command= inserir)
-btn_deletar= Button(quadroInserir, text= "Deletar", command= deletar)
-btn_pesquisar= Button(quadroInserir, text= "Pesquisar", command= pesquisar)
-
-btn_pesquisar.grid(column= 3, row= 1)
-
+cplaca.focus()
 app.mainloop()
