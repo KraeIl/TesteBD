@@ -117,21 +117,34 @@ def checar(e):
     if tamDigitado > 7:
         messagebox.showerror("ERRO!", "Limite máximo de caracteres excedido!")
         cplaca.delete(7, END)
+    
+    if e.keysym != "BackSpace" and e.keysym != "Delete":
+        
+        if digitadoP == '': 
+            dados= carros
 
-    if digitadoP == '': 
-        dados= carros
+        else:
+            dados = []
+            for item in carros:
+                placa = item[1]
+                if digitadoP.lower() in placa.lower():  
+                    dados.append(item)
+        
+        atualizar(dados)
 
-    else:
-        dados = []
-        for item in carros:
-            placa = item[1]
-            if digitadoP.lower() in placa.lower():  
-                dados.append(item)
 
-    atualizar(dados)
-
+    
 def fococModelo():
-    cmodelo.focus()
+    vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
+    carro= banco.dql(vquery)
+    
+    try:
+        if carro[0][5] == 1:
+            inserir()
+        else:
+            cmodelo.focus()    
+    except:
+        cmodelo.focus()
 
 def inserir():
     if cplaca.get()== "" or cmodelo.get()== "":
