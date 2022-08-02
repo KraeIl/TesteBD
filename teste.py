@@ -1,10 +1,6 @@
-from email import message_from_binary_file
-from email.mime import message
 from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
-from requests import delete
-from sqlalchemy import false
 import banco
 from datetime import *
     
@@ -51,7 +47,7 @@ def popular():
         else:
             horaSaida = datetime.now()
             tarifa = calcPagamento(horaEntrada=i[3], horaSaida= horaSaida)
-            tv.insert("", "end", values= (i[0], i[1], i[2], i[3], str(tarifa)))
+            tv.insert("", "end", values= (i[1], i[2], i[3], str(tarifa)))
             carros_no_patio.append(i)
 
 def autocompletar(e):
@@ -59,8 +55,8 @@ def autocompletar(e):
     cmodelo.delete(0, END)
 
     carro= tv.item(tv.selection()[0], "values")
-    valorPlaca = carro[1]
-    valorModelo = carro[2]
+    valorPlaca = carro[0]
+    valorModelo = carro[1]
     cplaca.insert(0, valorPlaca)
     cmodelo.insert(0, valorModelo)
     cmodelo.focus()
@@ -73,7 +69,7 @@ def atualizar(dados):
         else:
             horaSaida = datetime.now()
             tarifa = calcPagamento(horaEntrada=i[3], horaSaida= horaSaida)
-            tv.insert("", "end", values= (i[0], i[1], i[2], i[3], "R$: " + str(tarifa)))
+            tv.insert("", "end", values= (i[1], i[2], i[3], "R$: " + str(tarifa)))
     
     try:
         valorModelo = dados[0][2]
@@ -117,7 +113,22 @@ def checar(e):
     if tamDigitado > 7:
         messagebox.showerror("ERRO!", "Limite máximo de caracteres excedido!")
         cplaca.delete(7, END)
+
+    if tamDigitado <= 3:
+        nums = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        if e.keysym in nums:
+            messagebox.showerror("ERRO!", "Caractere Inválido!")
+            cplaca.delete(0, END)
+            return
     
+    if tamDigitado > 3:
+        nums = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        if e.keysym not in nums:
+            messagebox.showerror("ERRO!", "Caractere Inválido!")
+            cplaca.delete(0, END)
+            cmodelo.delete(0, END)
+            return
+
     if e.keysym != "BackSpace" and e.keysym != "Delete":
         
         if digitadoP == '': 
@@ -131,7 +142,10 @@ def checar(e):
                     dados.append(item)
         
         atualizar(dados)
-
+    else:
+        cmodelo.delete(0, END)
+        if cplaca.get() == '':
+            popular()
 
     
 def fococModelo():
@@ -157,16 +171,15 @@ def inserir():
     horaEnt += "%s:%s:%s" % (e.hour, e.minute, e.second)
 
     try:
-        vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
+        vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get() + "%'"
         carros= banco.dql(vquery)
         for c in carros:
             vTicket= c[0]
             vPatio= c[5]
-            vTicket= c[0]
             vEntrada= c[3]
        
         if vPatio== 1:
-            deletar(c[0], c[3])
+            saida(vTicket, vEntrada)
             cplaca.delete(0, END)
             cmodelo.delete(0, END)    
             cplaca.focus()
@@ -178,7 +191,7 @@ def inserir():
 
     except Exception as e:
         print(e)
-        vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, I_ESTANOPATIO) VALUES ('"+cplaca.get()+"','"+cmodelo.get()+"','"+horaEnt+"', '1')"
+        vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, I_ESTANOPATIO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"', '1')"
         banco.dml(vquery)
 
     popular()
@@ -187,7 +200,7 @@ def inserir():
     cplaca.focus()
 
 
-def deletar(vTicket, horaEnt):
+def saida(vTicket, horaEnt):
 
     e = datetime.now()
     horaSaida = "%s/%s/%s " % (e.day, e.month, e.year)
@@ -224,8 +237,9 @@ def pesquisar():
 
 app = Tk() 
 app.title("Estacionamento")
-app.geometry("420x400")
+app.geometry("420x340")
 app.configure(background="#dde")
+app.resizable(False, False)
 
 
 #quadroGrid
@@ -233,13 +247,11 @@ quadroGrid= LabelFrame(app, text= "Carros")
 quadroGrid.pack(fill="both", expand="yes", padx=10, pady= 10)
 
 #TreeView
-tv = ttk.Treeview(quadroGrid, columns= ('ticket', 'placa', 'modelo', 'horaEnt', "tarifa"), show= 'headings')
-tv.column('ticket', minwidth= 0, width= 50)
+tv = ttk.Treeview(quadroGrid, columns= ('placa', 'modelo', 'horaEnt', "tarifa"), show= 'headings')
 tv.column('placa', minwidth= 0, width= 70)
 tv.column('modelo', minwidth= 0, width= 100)
 tv.column('horaEnt', minwidth= 0, width= 115)
-tv.column('tarifa', minwidth= 0, width= 50)
-tv.heading('ticket', text= 'Ticket')
+tv.column('tarifa', minwidth= 0, width= 65)
 tv.heading('placa', text= 'Placa')
 tv.heading('modelo', text= 'Modelo')
 tv.heading('horaEnt', text= 'Horário de Entrada')
@@ -250,7 +262,7 @@ carros_no_patio = []
 popular()
 
 #quadroInserir
-quadroInserir = LabelFrame(app, text= "Inserir ou pesquisar carros")
+quadroInserir = LabelFrame(app, text= "Inserir, pesquisar ou dar baixa em carros")
 quadroInserir.pack(fill= "both", expand= "yes", padx= 10, pady= 10)
 
 #Labels
