@@ -1,7 +1,9 @@
+from asyncio.windows_events import NULL
 from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
 import banco
+import os, sys, win32print, win32api
 from datetime import *
     
 def calcPagamento(horaSaida, horaEntrada):
@@ -42,12 +44,12 @@ def popular():
     vquery= "SELECT * FROM tb_carros order by T_HORARIOENT"
     linhas= banco.dql(vquery)
     for i in linhas:
-        if i[5]== 0:
+        if i[3] != None:
             continue
         else:
             horaSaida = datetime.now()
-            tarifa = calcPagamento(horaEntrada=i[3], horaSaida= horaSaida)
-            tv.insert("", "end", values= (i[1], i[2], i[3], str(tarifa)))
+            tarifa = calcPagamento(horaEntrada=i[2], horaSaida= horaSaida)
+            tv.insert("", "end", values= (i[0], i[1], i[2], str(tarifa)))
             carros_no_patio.append(i)
 
 def autocompletar(e):
@@ -64,16 +66,16 @@ def autocompletar(e):
 def atualizar(dados):
     tv.delete(*tv.get_children())
     for i in dados:
-        if i[5]== 0:
+        if i[3] != None:
             continue
         else:
             horaSaida = datetime.now()
-            tarifa = calcPagamento(horaEntrada=i[3], horaSaida= horaSaida)
-            tv.insert("", "end", values= (i[1], i[2], i[3], "R$: " + str(tarifa)))
+            tarifa = calcPagamento(horaEntrada=i[2], horaSaida= horaSaida)
+            tv.insert("", "end", values= (i[0], i[1], i[2], "R$: " + str(tarifa)))
     
     try:
-        valorModelo = dados[0][2]
-        valorPlaca = dados[0][1]
+        valorModelo = dados[0][1]
+        valorPlaca = dados[0][0]
     except: 
         valorModelo = ''
         valorPlaca = ''
@@ -124,10 +126,11 @@ def checar(e):
     if tamDigitado > 3:
         nums = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
         if e.keysym not in nums:
-            messagebox.showerror("ERRO!", "Caractere Inválido!")
-            cplaca.delete(0, END)
-            cmodelo.delete(0, END)
-            return
+            if e.keysym != "Return" and e.keysym != "BackSpace" and e.keysym != "Delete": 
+                messagebox.showerror("ERRO!", "Caractere Inválido!")
+                cplaca.delete(0, END)
+                cmodelo.delete(0, END)
+                return
 
     if e.keysym != "BackSpace" and e.keysym != "Delete":
         
@@ -137,9 +140,10 @@ def checar(e):
         else:
             dados = []
             for item in carros:
-                placa = item[1]
-                if digitadoP.lower() in placa.lower():  
-                    dados.append(item)
+                placa = item[0]
+                if digitadoP.lower() in placa.lower():
+                    if placa not in dados:
+                        dados.append(item)
         
         atualizar(dados)
     else:
@@ -149,16 +153,30 @@ def checar(e):
 
     
 def fococModelo():
-    vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
-    carro= banco.dql(vquery)
-    
     try:
-        if carro[0][5] == 1:
-            inserir()
-        else:
-            cmodelo.focus()    
+        vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
+        carros = banco.dql(vquery)
+    
+        for carro in carros:
+            if carro[3] == None:
+                inserir()
+                return
+        
+        cmodelo.focus()
     except:
         cmodelo.focus()
+
+def imprimir(horaEnt, vPlaca, vModelo):
+    impressora = win32print.EnumPrinters(2)[3]
+    win32print.SetDefaultPrinter(impressora[2])
+    pasta = os.path.dirname(__file__)
+    caminho = pasta + "\\impressão\\impressão.txt"
+    with open(caminho, 'w') as f: 
+        texto = "***CESAR PARK*** \n HORARIO DE ENTRADA: {} \n PLACA: {}, MODELO: {} \n".format(horaEnt, vPlaca, vModelo)  
+        f.write(texto)
+        f.close()
+    
+    os.startfile(caminho, "print")
 
 def inserir():
     if cplaca.get()== "" or cmodelo.get()== "":
@@ -173,41 +191,39 @@ def inserir():
     try:
         vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get() + "%'"
         carros= banco.dql(vquery)
+        
         for c in carros:
-            vTicket= c[0]
-            vPatio= c[5]
-            vEntrada= c[3]
+            vPlaca= c[0]
+            vSaida= c[3]
+            vEntrada= c[2]
        
-        if vPatio== 1:
-            saida(vTicket, vEntrada)
-            cplaca.delete(0, END)
-            cmodelo.delete(0, END)    
-            cplaca.focus()
-            return
-    
-        print(vTicket)
-        vquery= "UPDATE tb_carros SET I_ESTANOPATIO= '1', T_HORARIOENT='%s' WHERE I_TICKET=%s" % (horaEnt, vTicket)
-        banco.dml(vquery)
+        if vSaida == None:
+            saida(vPlaca, vEntrada)
 
+        else:
+            print("aaa")
+            vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, C_TIPO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"','A')"
+            banco.dml(vquery)
+            imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
+                
     except Exception as e:
-        print(e)
-        vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, I_ESTANOPATIO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"', '1')"
+        vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, C_TIPO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"','A')"
         banco.dml(vquery)
+        imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
 
     popular()
     cplaca.delete(0, END)
     cmodelo.delete(0, END)    
     cplaca.focus()
 
-
-def saida(vTicket, horaEnt):
+def saida(vPlaca, horaEnt):
 
     e = datetime.now()
     horaSaida = "%s/%s/%s " % (e.day, e.month, e.year)
     horaSaida += "%s:%s:%s" % (e.hour, e.minute, e.second)     
     
     try:
-        vquery= "UPDATE tb_carros SET I_ESTANOPATIO= '0', T_HORARIOSAIDA='%s'  WHERE I_TICKET='%s'" % (horaSaida, vTicket)
+        vquery= "UPDATE tb_carros SET T_HORARIOSAIDA='%s' WHERE T_PLACA= '%s' AND T_HORARIOSAIDA IS NULL" % (horaSaida, vPlaca)
         tarifa = calcPagamento(horaSaida = e, horaEntrada= horaEnt)
         messagebox.showwarning(title= "PAGAMENTO", message= "O valor ficou em R$ %s Reais" % (tarifa))
         banco.dml(vquery)
@@ -228,7 +244,7 @@ def pesquisar():
         linhas= banco.dql(vquery)
 
         for i in linhas:
-            if i[5]== 0:
+            if i[3] != None:
                 continue
         else:
                 tv.insert("", "end", values= i)
