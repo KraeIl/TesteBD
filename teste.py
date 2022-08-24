@@ -1,9 +1,9 @@
-from asyncio.windows_events import NULL
 from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
 import banco
 import os, sys, win32print, win32api
+import time as t
 from datetime import *
     
 def calcPagamento(horaSaida, horaEntrada):
@@ -30,11 +30,11 @@ def calcPagamento(horaSaida, horaEntrada):
     elif totalminutos < 65:
         return 6.00
     elif totalminutos > 185:
-        períodos = (totalminutos/720) - ((totalminutos/720)%1)
+        períodos = (totalminutos//720)
         tarifa = 15 + (períodos*15)
         return tarifa
     else:
-        horas = ((totalminutos-60)/60) - (((totalminutos-60)/60)%1)
+        horas = ((totalminutos-60)//60)
         tarifa = 9+(3*horas)
         return tarifa
 
@@ -64,6 +64,7 @@ def autocompletar(e):
     cmodelo.focus()
 
 def atualizar(dados):
+    t.sleep(0.1)
     tv.delete(*tv.get_children())
     for i in dados:
         if i[3] != None:
@@ -91,18 +92,57 @@ def atualizar(dados):
         for char in digitado:
             placaInserir = placaInserir.replace(char, '', 1)
 
-        '''for char in digitado:
-            placaInserir = placaInserir.replace(char, '', 1)'''
-
         cmodelo.delete(0, END)
         cmodelo.insert(0, valorModelo)
         cplaca.insert(tamDigitado, placaInserir.upper())
         cplaca.selection_range(tamDigitado, END)
 
-def upperM(e):
+def autocompletar(e):
+    cplaca.delete(0, END)
+    cmodelo.delete(0, END)
+
+    carro= tv.item(tv.selection()[0], "values")
+    valorPlaca = carro[0]
+    valorModelo = carro[1]
+    cplaca.insert(0, valorPlaca)
+    cmodelo.insert(0, valorModelo)
+    cmodelo.focus()
+
+def checarM(e):
+    vquery= "SELECT * FROM tb_carros order by T_HORARIOENT"
+    carros= banco.dql(vquery)
     digitadoM = cmodelo.get()
     cmodelo.delete(0, END)
     cmodelo.insert(0, digitadoM.upper())
+    
+    if digitadoM != '':
+        if e.keysym != "BackSpace" and e.keysym != "Delete":
+            dados = []
+            for item in carros:
+                modelo = item[1]
+                if digitadoM.lower() in modelo.lower():
+                    if modelo not in dados:
+                        dados.append(item)
+        else:
+            return
+    else: 
+        return
+    
+    try:
+        valorModelo = dados[0][1]
+    except: 
+        valorModelo = ''
+
+    t.sleep(0.1)
+    tamDigitado = len(cmodelo.get())
+    digitado = cmodelo.get().lower()
+    modeloInserir = valorModelo.lower()
+        
+    for char in digitado:
+        modeloInserir = modeloInserir.replace(char, '', 1)
+
+    cmodelo.insert(tamDigitado, modeloInserir.upper())
+    cmodelo.selection_range(tamDigitado, END)
 
 def checar(e):
     vquery= "SELECT * FROM tb_carros order by T_HORARIOENT"
@@ -204,12 +244,12 @@ def inserir():
             print("aaa")
             vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, C_TIPO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"','A')"
             banco.dml(vquery)
-            imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
+            #imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
                 
     except Exception as e:
         vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, C_TIPO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"','A')"
         banco.dml(vquery)
-        imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
+        #imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
 
     popular()
     cplaca.delete(0, END)
@@ -293,7 +333,7 @@ cplaca.bind('<Return>', (lambda event: fococModelo()))
 
 cmodelo = Entry(quadroInserir)
 cmodelo.grid(column= 3, row= 0, padx= 5, pady= 5)
-cmodelo.bind('<KeyRelease>', upperM)
+cmodelo.bind('<KeyRelease>', checarM)
 cmodelo.bind('<Return>', (lambda event: inserir()))
 
 cplaca.focus()
