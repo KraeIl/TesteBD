@@ -5,25 +5,32 @@ import banco
 import os, sys, win32print, win32api
 import time as t
 from datetime import *
-    
+
 def calcPagamento(horaSaida, horaEntrada):
     hE = datetime.strptime(horaEntrada, '%d/%m/%Y %H:%M:%S') 
     permanencia = horaSaida - hE
 
     diaria = False
+    mes = False
     if permanencia.days == 0:
         tempoPermanencia = datetime.strptime(str(permanencia), '%H:%M:%S.%f')
     if permanencia.days == 1:
         tempoPermanencia = datetime.strptime(str(permanencia), '%d day, %H:%M:%S.%f')
         diaria = True
-    if permanencia.days > 1:
+    if permanencia.days > 1 and permanencia.days <= 31:
         tempoPermanencia = datetime.strptime(str(permanencia), '%d days, %H:%M:%S.%f')
         diaria = True
+    if permanencia.days > 31:
+        tempoPermanencia = datetime.strptime(str(permanencia), '%j days, %H:%M:%S.%f')
+        mes = True
 
     if (diaria):
         totalminutos = (tempoPermanencia.day*24*60) + (tempoPermanencia.hour*60) + tempoPermanencia.minute
+    elif (mes):
+        totalminutos = ((tempoPermanencia.month-1)*31*24*60) + (tempoPermanencia.day*24*60) + (tempoPermanencia.hour*60) + tempoPermanencia.minute
     else:
         totalminutos = (tempoPermanencia.hour*60) + tempoPermanencia.minute
+
 
     if totalminutos < 5:
         return 0
@@ -97,17 +104,6 @@ def atualizar(dados):
         cplaca.insert(tamDigitado, placaInserir.upper())
         cplaca.selection_range(tamDigitado, END)
 
-def autocompletar(e):
-    cplaca.delete(0, END)
-    cmodelo.delete(0, END)
-
-    carro= tv.item(tv.selection()[0], "values")
-    valorPlaca = carro[0]
-    valorModelo = carro[1]
-    cplaca.insert(0, valorPlaca)
-    cmodelo.insert(0, valorModelo)
-    cmodelo.focus()
-
 def checarM(e):
     vquery= "SELECT * FROM tb_carros order by T_HORARIOENT"
     carros= banco.dql(vquery)
@@ -163,7 +159,16 @@ def checar(e):
             cplaca.delete(0, END)
             return
     
-    if tamDigitado > 3:
+    if tamDigitado == 4:
+        nums = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        if e.keysym not in nums:
+            if e.keysym != "Return" and e.keysym != "BackSpace" and e.keysym != "Delete": 
+                messagebox.showerror("ERRO!", "Caractere Inválido!")
+                cplaca.delete(0, END)
+                cmodelo.delete(0, END)
+                return
+    
+    if tamDigitado > 5:
         nums = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
         if e.keysym not in nums:
             if e.keysym != "Return" and e.keysym != "BackSpace" and e.keysym != "Delete": 
@@ -241,7 +246,6 @@ def inserir():
             saida(vPlaca, vEntrada)
 
         else:
-            print("aaa")
             vquery= "INSERT INTO tb_carros (T_PLACA, T_MODELO, T_HORARIOENT, C_TIPO) VALUES ('"+cplaca.get().upper()+"','"+cmodelo.get().upper()+"','"+horaEnt+"','A')"
             banco.dml(vquery)
             #imprimir(horaEnt= horaEnt, vPlaca= cplaca.get().upper(), vModelo= cmodelo.get().upper())
@@ -272,24 +276,6 @@ def saida(vPlaca, horaEnt):
     except Exception as e:
         messagebox.showerror(title= "ERRO", message= e)
         return 
-
-def pesquisar():
-
-    if cplaca.get()== "":
-            popular()
-
-    else:
-        tv.delete(*tv.get_children())
-        vquery= "SELECT * FROM tb_carros WHERE T_PLACA LIKE '%" + cplaca.get()+ "%'"
-        linhas= banco.dql(vquery)
-
-        for i in linhas:
-            if i[3] != None:
-                continue
-        else:
-                tv.insert("", "end", values= i)
-
-
 
 app = Tk() 
 app.title("Estacionamento")
